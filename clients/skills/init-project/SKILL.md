@@ -309,7 +309,10 @@ argument-hint: "[existing|new]"
 
   ```bash
   cp -r "$STAGING/dot-claude/"* .claude/ && rm -rf "$STAGING"
+  node -e 'import(process.argv[1]).then((m) => m.syncCopilotAgentDirectory(".claude/agents", ".github/agents"))' "{skill_base_dir}/../../hooks/lib/copilot-agents.mjs"
   ```
+
+  `.claude/agents/` is the source of truth; the generated `.github/agents/` mirrors omit Coral's abstract model tiers and `effort:`. Mirrors carry the YAML comment marker `# coral-agent-mirror: v1`. Sync refreshes and removes only marked mirrors. Existing unmarked same-name agents are preserved and reported as conflicts, and unrelated files and directories are never deleted or overwritten.
 
   Then run Coral's shared project-ignore maintainer. It preflights the complete change,
   writes the anchored `.git/info/exclude` entry, creates or reuses the symlink, and then
@@ -436,6 +439,7 @@ argument-hint: "[existing|new]"
   | Ignore | Git-root `.gitignore` | If it contained Coral's legacy project entry | Exact legacy entry absent; every other byte preserved |
   | Link | `.claude/coral` | Must exist as a symlink | Resolves to `CORAL_PROJECT` |
   | Agents | `.claude/agents/{domain-specific}.md` | Per plan | `<Agent_Prompt>` XML structure |
+  | Agents (Copilot) | `.github/agents/*.md` | Generated for each `.claude/agents/*.md`; additional user agents may remain | Marked Coral mirrors omit abstract tier `model:` and `effort:`; unmarked targets are preserved and conflicts reported |
   | Docs | `docs/ARCHITECTURE.md` | If generated | Layer diagram present |
   | Docs | `docs/DEV_GUIDE.md` | If generated | Exact build/test commands |
   | Docs | `docs/{domain-specific}.md` | Per domain reference Recommended Docs | Architecture-level content, not catalogs |

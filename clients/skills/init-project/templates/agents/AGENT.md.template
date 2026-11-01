@@ -65,7 +65,7 @@ model: <opus|sonnet>
 |-------|----------|-------------|
 | `name` | yes | kebab-case agent name |
 | `description` | yes | One-line with "Use when... NOT for..." |
-| `model` | yes | `opus` (deep reasoning) or `sonnet` (protocol execution) |
+| `model` | yes | `opus` (deep reasoning) or `sonnet` (protocol execution) in `.claude/agents/`; omitted in `.github/agents/` mirrors so Copilot CLI inherits the session/subagent model |
 | `methods` | no | HOW methods list, e.g., `[HOW-REVIEW, HOW-PROVENANCE]` |
 | `deep` | no | `bool` — enables `--deep` flag for HOW method injection |
 | `disallowedTools` | no | `Write, Edit` for read-only agents |

@@ -1,8 +1,17 @@
 #!/usr/bin/env node
 
 import { join } from 'node:path';
-import { coralProjectDir, exitIfChildProcess, exitIfWrongFlavor, readStdin, readUserMessage, writeHookOutput } from './lib/hook-utils.mjs';
+import {
+  coralProjectDir,
+  exitIfChildProcess,
+  exitIfWrongFlavor,
+  hostKind,
+  readStdin,
+  readUserMessage,
+  writeHookOutput,
+} from './lib/hook-utils.mjs';
 import { isCoralSkillField, CORAL_SKILL_MESSAGE_RE } from './lib/coral-skills.mjs';
+import { COPILOT_HOST_BRIDGE } from './lib/inject-render.mjs';
 exitIfChildProcess();
 exitIfWrongFlavor();
 
@@ -29,11 +38,15 @@ try {
     `CORAL_PROJECT: ${coralProjectDir(projectDir)}`,
     `CORAL_METHODS: ${join(pluginRoot, 'methods')}/`,
   ].join('\n');
+  const copilotGuidance =
+    hostKind() === 'copilot'
+      ? `\n${COPILOT_HOST_BRIDGE}`
+      : '';
 
   writeHookOutput({
     hookSpecificOutput: {
       hookEventName: event,
-      additionalContext: `Coral skill path variables — substitute these for the named placeholders in the skill body:\n${context}`,
+      additionalContext: `Coral skill path variables — substitute these for the named placeholders in the skill body:\n${context}${copilotGuidance}`,
     },
   });
 } catch {

@@ -95,6 +95,8 @@ describe('session-start.mjs', () => {
     expect(output.additionalContext).toMatch(
       /^SessionStart:session_id=sess-123\nCurrent host: copilot\nClaude config dir: .+\n\n/u,
     );
+    expect(output.additionalContext).toContain('# Copilot Host Bridge');
+    expect(output.additionalContext).toContain('Tool mapping: `Agent`→`task`');
   });
 
   it('replaces {{CORAL_PROJECTS}} with the source-derived global project dir', () => {
@@ -508,6 +510,7 @@ describe('coral-skill-vars hook', () => {
     expect(output.hookSpecificOutput.additionalContext).toContain('CORAL_PROJECT:');
     expect(output.hookSpecificOutput.additionalContext).toContain('CORAL_METHODS:');
     expect(output.hookSpecificOutput.additionalContext).toContain(join(fixture.pluginRoot, 'methods'));
+    expect(output.hookSpecificOutput.additionalContext).not.toContain('# Copilot Host Bridge');
   });
 
   it('injects context for PreToolUse with coral: skill prefix', () => {
@@ -553,6 +556,9 @@ describe('coral-skill-vars hook', () => {
     expect(result.status).toBe(0);
     const output = JSON.parse(result.stdout) as { additionalContext?: string };
     expect(output.additionalContext).toContain('CORAL_PROJECT:');
+    expect(output.additionalContext).toContain('# Copilot Host Bridge');
+    expect(output.additionalContext).toContain('CORAL_METHODS/');
+    expect(output.additionalContext).toContain('CORAL_PROJECT/');
   });
 });
 

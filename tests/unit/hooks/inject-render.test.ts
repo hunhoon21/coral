@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { KB_START_HOOK, expectHookOutput, runHook } from '#tests/unit/hooks/_helpers.js';
 
 // @ts-expect-error — hook libs are plain Node ESM (.mjs) with no type surface.
-import { MAX_ADDITIONAL_CONTEXT_BYTES } from '../../../clients/hooks/lib/additional-context.mjs';
+import { MAX_ADDITIONAL_CONTEXT_BYTES, fitAdditionalContext } from '../../../clients/hooks/lib/additional-context.mjs';
 // @ts-expect-error — hook libs are plain Node ESM (.mjs) with no type surface.
 import { EQUIP_AGENT_TOOLS } from '../../../clients/hooks/lib/equip-tools.mjs';
 // @ts-expect-error — hook libs are plain Node ESM (.mjs) with no type surface.
@@ -145,20 +145,56 @@ describe('renderInject fragment composition', () => {
   });
 
   it('keeps the owner payload with equipped tools at or below 8,000 bytes', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'coral-inject-budget-project-'));
+    createdRoots.push(projectDir);
     const input = {
       pluginRoot: join(process.cwd(), 'clients'),
-      projectDir: undefined,
-      sessionId: 'size-gate-session',
+      projectDir,
+      sessionId: '3f74de81-e6b7-4671-b0ca-89e15518df9d',
       asOwner: true,
       kbEnabled: true,
       equippedTools: EQUIP_AGENT_TOOLS,
     };
     const base = renderInject({ ...input, group: 'base' });
+    const copilotBase = renderInject({ ...input, group: 'base', host: 'copilot' });
     const kb = renderInject({ ...input, group: 'kb' });
-    const basePayload = `SessionStart:session_id=size-gate-session\nCurrent host: claude\nClaude config dir: /tmp/claude\n\n${base}`;
+    const basePayload = `SessionStart:session_id=${input.sessionId}\nCurrent host: claude\nClaude config dir: /Users/user/.claude\n\n${base}`;
+    const copilotBasePayload = `SessionStart:session_id=${input.sessionId}\nCurrent host: copilot\nClaude config dir: /Users/user/.claude\n\n${copilotBase}`;
+    const trimNotice =
+      'Coral startup notices were trimmed to fit this hook payload; inspect the coordinator startup diagnostic and project ignore state for full details.';
+    const fittedCopilot = fitAdditionalContext({
+      fixedContent: copilotBasePayload,
+      variableContent: 'notice '.repeat(500),
+      trimNotice,
+    });
 
     expect(Buffer.byteLength(basePayload, 'utf-8')).toBeLessThanOrEqual(MAX_ADDITIONAL_CONTEXT_BYTES);
+    expect(Buffer.byteLength(copilotBasePayload, 'utf-8')).toBeLessThanOrEqual(MAX_ADDITIONAL_CONTEXT_BYTES);
+    expect(Buffer.byteLength(fittedCopilot, 'utf-8')).toBeLessThanOrEqual(MAX_ADDITIONAL_CONTEXT_BYTES);
+    expect(fittedCopilot).toContain(trimNotice);
+    expect(copilotBase).toContain('# Copilot Host Bridge');
+    expect(base).not.toContain('# Copilot Host Bridge');
     expect(Buffer.byteLength(kb, 'utf-8')).toBeLessThanOrEqual(MAX_ADDITIONAL_CONTEXT_BYTES);
+  });
+
+  it('only adds the Copilot bridge to the owner base payload', () => {
+    const input = {
+      pluginRoot: join(process.cwd(), 'clients'),
+      projectDir: undefined,
+      sessionId: 'bridge-gate-session',
+      kbEnabled: true,
+      equippedTools: [],
+    };
+
+    expect(renderInject({ ...input, asOwner: true, group: 'base', host: 'copilot' })).toContain(
+      '# Copilot Host Bridge',
+    );
+    expect(renderInject({ ...input, asOwner: false, group: 'base', host: 'copilot' })).not.toContain(
+      '# Copilot Host Bridge',
+    );
+    expect(renderInject({ ...input, asOwner: true, group: 'kb', host: 'copilot' })).not.toContain(
+      '# Copilot Host Bridge',
+    );
   });
 
   it('fits the real KB hooks when the project wiki wake-up exceeds the payload budget', () => {

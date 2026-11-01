@@ -36,7 +36,7 @@ Copilot reuses Claude Code's hook vocabulary, but six details differ. All were v
 
 **Skill field values.** `tool_input.skill` carries the _bare_ skill name under Copilot (`ralph`), not `coral:ralph`; Copilot namespaces it only when two installed plugins ship the same skill name. `isCoralSkillField()` / `isKbSkillField()` accept the bare form **only** when the host is Copilot — on Claude and Codex a bare `plan` is a user's own skill of that name, and matching it would fire Coral's hooks for a skill Coral does not own.
 
-**Agents.** Copilot discovers a plugin's `agents/` directory even when the manifest omits the key, and exposes each as `coral:<name>` — the same identifier the skills spawn — so `agents` is declared rather than suppressed in `clients/.github/plugin/plugin.json`. Backend-only agents (`workflow-literal`, `persona-generator`) become visible as a side effect; both are harmless to spawn. **Caveat**: because Copilot fires no `SubagentStart` (see "Compact recovery and subagent inject are Claude/Codex-only" below), a `coral:*` subagent on Copilot runs **without** Coral's inject bundle, so neither `CORAL_METHODS` (`clients/hooks/coral-skill-vars.mjs`, `clients/hooks/lib/inject-render.mjs`) nor `CORAL_PROJECT` resolves inside it. Every agent that reads its methodology from `CORAL_METHODS/` — `architect`, `critic`, `debugger`, `gap-finder`, `scanner`, `resolver` — is therefore spawnable but methodology-degraded there. Declaring `agents` restores _spawn-ability_, not full parity. The `coral-cli` job path is unaffected: `src/providers/inject.ts` substitutes the same aliases for provider-run agents.
+**Agents.** Copilot discovers a plugin's `agents/` directory even when the manifest omits the key, and exposes each as `coral:<name>` — the same identifier the skills spawn — so `agents` is declared rather than suppressed in `clients/.github/plugin/plugin.json`. Backend-only agents (`workflow-literal`, `persona-generator`) become visible as a side effect; both are harmless to spawn. **Caveat**: because Copilot fires no `SubagentStart` (see "Compact recovery and subagent inject are Claude/Codex-only" below), a `coral:*` subagent on Copilot runs without a hook-injected Coral bundle. The owner `SessionStart` payload and matching skill-vars hook provide a best-effort `# Copilot Host Bridge`: the orchestrator is instructed to inline the resolved `CORAL_METHODS` and `CORAL_PROJECT` paths in native `task` prompts and map Claude tool names (`Agent`, `Skill` (bare name), `AskUserQuestion`, `Read`/`Write`/`Edit`, `Glob`/`Grep`/`Bash`) to Copilot's native tools (`task`, `skill`, `ask_user`, `view`/`create`/`edit`, `glob`/`grep`/`bash`). The bridge is owner/base-only in `renderInject`; the skill-vars hook repeats the same shared guidance for matching skill events. The `coral-cli` job path is unaffected: `src/providers/inject.ts` substitutes the same aliases for provider-run agents.
 
 Host detection lives in `hostKind()` and keys on `COPILOT_PLUGIN_ROOT`, not `COPILOT_CLI`: Copilot exports `COPILOT_CLI` into _every_ shell it spawns, so it leaks into unrelated child processes, while `COPILOT_PLUGIN_ROOT` is set only for plugin hook invocations.
 
@@ -100,6 +100,7 @@ Path aliases in `tools.md` teach agents to open `CORAL_METHODS/HOW-*.md` and `CO
 | `kb/common.md`       | included                       | included                         | omitted        | omitted     |
 | `kb/orchestrator.md` | included                       | omitted                          | omitted        | omitted     |
 | `kb/session.md`      | included                       | included                         | omitted        | omitted     |
+| Copilot Host Bridge  | included for Copilot only     | omitted                          | omitted        | omitted     |
 
 Orchestrator content is limited to the top-level host session. A provider child is told nothing about the Coral CLI or the KB: it has no hook to resolve `coral-cli`, and CLI and KB work belong to the host session.
 
@@ -109,7 +110,7 @@ The `tools.md` fragment's `{{EQUIPPED_TOOLS}}` placeholder lists agent-facing to
 
 ### Skill path vars
 
-`coral-skill-vars.mjs` still injects short `CORAL_PROJECT:` / `CORAL_METHODS:` lines on skill-related `UserPromptSubmit` / `PreToolUse(Skill)` for host skill protocols. Those aliases are also present in `tools.md` for every inject surface above, so provider children and Claude-native subagents do not depend on the skill hook.
+`coral-skill-vars.mjs` still injects short `CORAL_PROJECT:` / `CORAL_METHODS:` lines on skill-related `UserPromptSubmit` / `PreToolUse(Skill)` for host skill protocols. On Copilot it also repeats the shared `# Copilot Host Bridge` guidance because Copilot has no `SubagentStart` hook; this is advisory prompt context, not deterministic task-input rewriting. Those aliases are also present in `tools.md` for every inject surface above, so provider children and Claude-native subagents do not depend on the skill hook.
 
 ## SessionStart
 

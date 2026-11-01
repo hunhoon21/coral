@@ -181,6 +181,7 @@ try {
     ? runProjectIgnoreMaintenance(projectDir, process.env.CORAL_AUTO_SYMLINK === '1')
     : { outcome: 'no-project-dir', maintenance: null };
 
+  const host = hostKind();
   const injectContent = renderInject({
     pluginRoot: PLUGIN_ROOT,
     projectDir,
@@ -188,9 +189,8 @@ try {
     asOwner: true,
     group: 'base',
     equippedTools: resolveEquippedTools(),
+    host,
   });
-
-  const host = hostKind();
 
   const scopedDiscarded = ignoreOutcome.maintenance?.artifacts.scopedIgnoreRetraction?.state === 'removed';
   const migrationPublished = [

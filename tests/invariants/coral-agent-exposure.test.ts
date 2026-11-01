@@ -4,16 +4,29 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // @ts-expect-error — hook libs are plain Node ESM (.mjs) with no type surface.
+import { CORAL_ABSTRACT_MODEL_TIERS, markAsOwnedMirror, normalizeCopilotAgentContent } from '../../clients/hooks/lib/copilot-agents.mjs';
+// @ts-expect-error — hook libs are plain Node ESM (.mjs) with no type surface.
 import { ALL_SHIPPED_SKILLS } from '../../clients/hooks/lib/coral-skills.mjs';
+import { parseAgentMeta } from '#src/jobs/agent-resolution.js';
 
 const CLIENT_MANIFESTS = [
-  'clients/.claude-plugin/plugin.json',
-  'clients/.codex-plugin/plugin.json',
-  'clients/.github/plugin/plugin.json',
+  { path: 'clients/.claude-plugin/plugin.json', expectedAgents: undefined },
+  { path: 'clients/.codex-plugin/plugin.json', expectedAgents: undefined },
+  { path: 'clients/.github/plugin/plugin.json', expectedAgents: './.github/agents/' },
 ] as const;
 
 const SKILLS_DIR = join(process.cwd(), 'clients', 'skills');
 const AGENTS_DIR = join(process.cwd(), 'clients', 'agents');
+const COPILOT_PLUGIN_AGENTS_DIR = join(process.cwd(), 'clients', '.github', 'agents');
+const CLAUDE_PROJECT_AGENTS_DIR = join(process.cwd(), '.claude', 'agents');
+const COPILOT_PROJECT_AGENTS_DIR = join(process.cwd(), '.github', 'agents');
+
+function markdownFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+    .map((entry) => entry.name)
+    .sort();
+}
 
 function skillBodies(): Array<{ skill: string; text: string }> {
   return readdirSync(SKILLS_DIR, { withFileTypes: true })
@@ -45,30 +58,52 @@ function referencedAgents(): Map<string, string[]> {
 }
 
 describe('coral agent exposure', () => {
-  it.each(CLIENT_MANIFESTS)('%s exposes the agent directory to its client', (manifestPath) => {
-    // A client that declares an empty `agents` suppresses discovery, and every skill
-    // whose default path spawns `coral:<name>` silently loses it — the spawn fails
-    // inside a subagent with nothing surfacing to the session. Shipped once already
-    // (`"agents": []` on the Copilot manifest), so it is asserted rather than trusted.
-    // Two forms are accepted: the explicit directory, or the key absent, which is the
-    // discovery default both sibling manifests rely on today.
-    const manifest = JSON.parse(readFileSync(join(process.cwd(), manifestPath), 'utf-8')) as {
+  it.each(CLIENT_MANIFESTS)('$path exposes the expected agent directory to its client', ({ path, expectedAgents }) => {
+    const manifest = JSON.parse(readFileSync(join(process.cwd(), path), 'utf-8')) as {
       agents?: unknown;
     };
-    if (manifest.agents === undefined) return;
-    expect(manifest.agents).toBe('./agents/');
+    expect(manifest.agents).toBe(expectedAgents);
   });
 
-  it('every coral:<agent> a skill spawns has an agent file', () => {
-    // Assertion 1 alone would pass a skill spawning an agent that does not exist —
-    // the same invisible failure, reached from the other side.
+  it('every coral:<agent> a skill spawns has an agent file in both canonical and Copilot directories', () => {
     const referenced = referencedAgents();
-    expect(referenced.size).toBeGreaterThan(0); // a rule matching nothing would pass vacuously
+    expect(referenced.size).toBeGreaterThan(0);
 
-    const missing = [...referenced.entries()]
+    const missingCanonical = [...referenced.entries()]
       .filter(([name]) => !existsSync(join(AGENTS_DIR, `${name}.md`)))
       .map(([name, skills]) => `${name} (referenced by ${skills.join(', ')})`);
+    const missingCopilot = [...referenced.entries()]
+      .filter(([name]) => !existsSync(join(COPILOT_PLUGIN_AGENTS_DIR, `${name}.md`)))
+      .map(([name, skills]) => `${name} (referenced by ${skills.join(', ')})`);
 
-    expect(missing).toEqual([]);
+    expect(missingCanonical).toEqual([]);
+    expect(missingCopilot).toEqual([]);
   });
+
+  it.each([
+    { label: 'bundled plugin agents', sourceDir: AGENTS_DIR, targetDir: COPILOT_PLUGIN_AGENTS_DIR },
+    { label: 'project reviewer agents', sourceDir: CLAUDE_PROJECT_AGENTS_DIR, targetDir: COPILOT_PROJECT_AGENTS_DIR },
+  ])(
+    'keeps Copilot $label in lockstep with canonical agents while stripping abstract model tiers',
+    ({ sourceDir, targetDir }) => {
+      const sourceFiles = markdownFiles(sourceDir);
+      expect(sourceFiles.length).toBeGreaterThan(0);
+      expect(markdownFiles(targetDir)).toEqual(sourceFiles);
+
+      const abstractTiers = new Set<string>(CORAL_ABSTRACT_MODEL_TIERS as readonly string[]);
+      for (const file of sourceFiles) {
+        const sourceContent = readFileSync(join(sourceDir, file), 'utf-8');
+        const targetContent = readFileSync(join(targetDir, file), 'utf-8');
+        expect(targetContent).toBe(markAsOwnedMirror(normalizeCopilotAgentContent(sourceContent)));
+
+        const sourceMeta = parseAgentMeta(sourceContent);
+        expect(sourceMeta.model).toBeDefined();
+        expect(abstractTiers.has(sourceMeta.model!)).toBe(true);
+
+        const targetMeta = parseAgentMeta(targetContent);
+        expect(targetMeta.model).toBeUndefined();
+        expect(targetMeta.effort).toBeUndefined();
+      }
+    },
+  );
 });

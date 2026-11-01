@@ -15,6 +15,7 @@ import {
   SUCCESSION_CAPABILITIES_FILE,
   SUCCESSION_CAPABILITY_VERSION,
 } from '../src/infra/bundle-manifest-address.ts';
+import { syncCopilotAgentDirectory } from '../clients/hooks/lib/copilot-agents.mjs';
 
 const { storeEpochHookSource } = await import('../dist/store/epoch/index.js');
 writeFileSync('clients/hooks/lib/store-epoch.mjs', storeEpochHookSource());
@@ -124,6 +125,9 @@ for (const path of [
     writeFileSync(path, JSON.stringify(json, null, 2) + '\n');
   }
 }
+
+syncCopilotAgentDirectory('clients/agents', 'clients/.github/agents');
+syncCopilotAgentDirectory('.claude/agents', '.github/agents');
 
 let sharedOpts = createProductionServerEsbuildOptions({
   version,
